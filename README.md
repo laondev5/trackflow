@@ -114,8 +114,15 @@ Pick one way to trigger it:
 | Hosting | Setup |
 |---|---|
 | `next start` / VPS / Docker / Railway / Render | `ENABLE_INTERNAL_CRON=true` (runs every 60s via `src/instrumentation.ts`) |
-| Vercel | `vercel.json` cron (every 5 minutes; the Pro plan is needed for sub-daily crons) and set `CRON_SECRET` |
+| Vercel (Hobby) | `vercel.json` runs once a day (06:00 UTC) as a safety net. **Also** add a frequent trigger: [cron-job.org](https://cron-job.org) (free, every minute) or the included GitHub Action `.github/workflows/reminders.yml` (every 5 min). Set `ENABLE_INTERNAL_CRON=false` |
+| Vercel (Pro) | Change the schedule in `vercel.json` to `*/5 * * * *` |
 | Any other host | An external scheduler (cron-job.org, GitHub Actions, system cron) calls `POST /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET`, or runs `npm run reminders` |
+
+### cron-job.org setup (recommended on Vercel Hobby)
+1. Create a free account at cron-job.org → **Create cronjob**
+2. URL: `https://<your-app>.vercel.app/api/cron/reminders`, schedule: every 1 minute
+3. **Advanced** → Request method `POST`, header `Authorization` = `Bearer <CRON_SECRET>`
+4. Save, then click **Test run**. You should get `{"ok":true,...}`.
 
 ## Project structure
 ```

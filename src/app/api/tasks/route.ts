@@ -4,9 +4,13 @@ import { TaskModel, type TaskDoc } from "@/lib/models/Task";
 import { taskCreateSchema } from "@/lib/validators";
 import { serializeTask } from "@/lib/serialize";
 import { assertProjectOwner } from "@/lib/task-service";
+import { triggerReminderSweep } from "@/lib/reminder-trigger";
+
+export const maxDuration = 60;
 
 export const GET = handler(async () => {
   const user = await requireUser();
+  triggerReminderSweep();
   // Open tasks + tasks completed in the last 90 days (for stats & history).
   const since = new Date(Date.now() - 90 * 86_400_000);
   const tasks = await TaskModel.find({

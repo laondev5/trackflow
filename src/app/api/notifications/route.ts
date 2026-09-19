@@ -4,9 +4,14 @@ import { requireUser } from "@/lib/auth";
 import { handler, ok } from "@/lib/api-helpers";
 import { NotificationModel, type NotificationDoc } from "@/lib/models/Notification";
 import { serializeNotification } from "@/lib/serialize";
+import { triggerReminderSweep } from "@/lib/reminder-trigger";
+
+// Gives the post-response reminder sweep (after()) enough time on serverless.
+export const maxDuration = 60;
 
 export const GET = handler(async () => {
   const user = await requireUser();
+  triggerReminderSweep();
   const [items, unread] = await Promise.all([
     NotificationModel.find({ userId: user._id }).sort({ createdAt: -1 }).limit(100).lean<NotificationDoc[]>(),
     NotificationModel.countDocuments({ userId: user._id, read: false }),

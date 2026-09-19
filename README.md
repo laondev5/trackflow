@@ -87,7 +87,7 @@ Edit `.env.local`:
 | `APP_URL` | Public URL, used in email links |
 | `SMTP_HOST` `SMTP_PORT` `SMTP_SECURE` `SMTP_USER` `SMTP_PASS` `EMAIL_FROM` | Nodemailer SMTP settings |
 | `CRON_SECRET` | Protects `/api/cron/reminders` |
-| `ENABLE_INTERNAL_CRON` | `true` runs reminders every minute inside the Node server (dev, VPS, Docker, Railway, Render) |
+| `ENABLE_INTERNAL_CRON` | Optional. `true` also runs reminders on a 60s timer on long-running servers (dev, VPS, Docker). Ignored on Vercel |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` `VAPID_PRIVATE_KEY` `VAPID_SUBJECT` | Optional Web Push. Generate with `npx web-push generate-vapid-keys` |
 
 **Gmail:** turn on 2-step verification, create an [App Password](https://myaccount.google.com/apppasswords), then use `smtp.gmail.com`, port `465`, `SMTP_SECURE=true`.
@@ -109,20 +109,18 @@ Use **Settings → Send test email** to check your SMTP setup.
 2. **Overdue**: tasks whose `dueDate` has passed and haven't been flagged yet → one batched email per user
 3. **Daily plan**: at each user's `digestHour` in their time zone
 
-Pick one way to trigger it:
+**No cron needed.** The job runs on the server, triggered by normal app traffic (`src/lib/reminder-trigger.ts`):
+- `GET /api/notifications`, `/api/tasks` and `/api/auth/me` call `triggerReminderSweep()`. Open clients poll notifications every 60s, so these requests happen regularly.
+- The sweep runs in Next's `after()` once the response has been sent, so users never wait for it. On Vercel it is kept alive with `waitUntil`.
+- A MongoDB lock (`joblocks` collection) makes sure only one sweep runs per minute, across every serverless instance.
+- `joblocks.lastResult` records the outcome of the last sweep, for debugging.
 
 | Hosting | Setup |
 |---|---|
-| `next start` / VPS / Docker / Railway / Render | `ENABLE_INTERNAL_CRON=true` (runs every 60s via `src/instrumentation.ts`) |
-| Vercel (Hobby) | `vercel.json` runs once a day (06:00 UTC) as a safety net. **Also** add a frequent trigger: [cron-job.org](https://cron-job.org) (free, every minute) or the included GitHub Action `.github/workflows/reminders.yml` (every 5 min). Set `ENABLE_INTERNAL_CRON=false` |
-| Vercel (Pro) | Change the schedule in `vercel.json` to `*/5 * * * *` |
-| Any other host | An external scheduler (cron-job.org, GitHub Actions, system cron) calls `POST /api/cron/reminders` with `Authorization: Bearer $CRON_SECRET`, or runs `npm run reminders` |
+| Vercel / any serverless | Nothing to set up. Leave `ENABLE_INTERNAL_CRON` unset (it's ignored on Vercel anyway) |
+| `next start` / VPS / Docker | Optional `ENABLE_INTERNAL_CRON=true` also runs the sweep on a 60s timer, so reminders go out even when nobody has the app open |
 
-### cron-job.org setup (recommended on Vercel Hobby)
-1. Create a free account at cron-job.org → **Create cronjob**
-2. URL: `https://<your-app>.vercel.app/api/cron/reminders`, schedule: every 1 minute
-3. **Advanced** → Request method `POST`, header `Authorization` = `Bearer <CRON_SECRET>`
-4. Save, then click **Test run**. You should get `{"ok":true,...}`.
+> **Limitation on serverless:** the sweep only runs while someone is using the app (at least one open tab or installed PWA). Emails for reminders that come due while nobody has the app open are sent the next time any user opens it (reminders more than 12 hours late only go to the notification center). `POST /api/cron/reminders` (Bearer `CRON_SECRET`) still exists if you ever want to add an external trigger.
 
 ## Project structure
 ```
